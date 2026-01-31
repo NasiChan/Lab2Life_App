@@ -44,11 +44,11 @@ Note: This project was created for Ellehacks in collaboration between Lyanghyeon
 - **Medications**: User medications with dosage, frequency, timing, timeBlock, foodRule, separationRules
 - **Supplements**: User supplements with dosage, timeBlock, foodRule, separationRules
 - **Recommendations**: AI-generated health recommendations (supplement, dietary, physical)
-- **Reminders**: Scheduled reminders for medications/supplements
+- **Reminders**: : Smart notifications scheduled using user-defined wake-up and meal times for medications/supplements
 - **Interactions**: Drug/supplement interaction warnings
 - **Pill Stacks**: Groups of pills taken together at specific times
 - **Pill Doses**: Daily tracking of individual pill doses with status (pending/taken/snoozed)
-- **Conversations/Messages**: AI chat history (Replit integration module)
+
 
 ### Pill Planner Feature
 The Pill Planner (`/planner`) is a mobile-first daily/weekly medication and supplement tracker:
