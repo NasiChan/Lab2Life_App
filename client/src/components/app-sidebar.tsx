@@ -48,6 +48,11 @@ const mainMenuItems = [
 
 const trackingMenuItems = [
   {
+    title: "Reminders",
+    url: "/reminders",
+    icon: Clock,
+  },
+  {
     title: "Medications",
     url: "/medications",
     icon: Pill,
@@ -56,11 +61,6 @@ const trackingMenuItems = [
     title: "Supplements",
     url: "/supplements",
     icon: Apple,
-  },
-  {
-    title: "Reminders",
-    url: "/reminders",
-    icon: Clock,
   },
 ];
 
