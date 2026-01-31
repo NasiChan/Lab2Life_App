@@ -21,6 +21,7 @@ import {
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 const mainMenuItems = [
@@ -82,6 +83,13 @@ const settingsMenuItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { setOpenMobile, isMobile } = useSidebar();
+
+  const handleItemClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   return (
     <Sidebar>
@@ -109,7 +117,7 @@ export function AppSidebar() {
                     isActive={location === item.url}
                     data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={handleItemClick}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>
@@ -131,7 +139,7 @@ export function AppSidebar() {
                     isActive={location === item.url}
                     data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={handleItemClick}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>
@@ -153,7 +161,7 @@ export function AppSidebar() {
                     isActive={location === item.url}
                     data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={handleItemClick}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>
@@ -175,7 +183,7 @@ export function AppSidebar() {
                     isActive={location === item.url}
                     data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={handleItemClick}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>
