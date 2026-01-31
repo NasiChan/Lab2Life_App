@@ -57,6 +57,18 @@ The Pill Planner (`/planner`) is a mobile-first daily/weekly medication and supp
 - **Conflict Detection**: Visual warnings for separation rules (e.g., Iron + Calcium)
 - **Food Rules**: Tags showing whether to take with food or on empty stomach
 
+### Health Profile Onboarding
+The app includes a health profile onboarding system to capture basic user information for personalized recommendations:
+- **Onboarding Modal**: Appears on first login if profile is incomplete and not skipped
+- **Profile Fields**: Age, sex, height (cm), weight (kg), activity level (low/moderate/high)
+- **Skip Option**: Users can skip onboarding and complete profile later
+- **Profile & Settings Page** (`/profile`): Allows users to view and edit their health profile at any time
+- **API Endpoints**:
+  - GET `/api/me` - Returns current user with health profile data
+  - PATCH `/api/me/health-profile` - Updates user's health profile
+  - POST `/api/me/health-profile/skip` - Records that user skipped onboarding
+- **Data Storage**: healthProfile and healthProfileStatus stored as JSONB in users table
+
 ### Project Structure
 ```
 ├── client/src/          # React frontend
