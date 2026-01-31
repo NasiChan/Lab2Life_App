@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, boolean, jsonb, decimal } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, boolean, jsonb, decimal, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -55,15 +55,32 @@ export const insertHealthMarkerSchema = createInsertSchema(healthMarkers).omit({
 export type InsertHealthMarker = z.infer<typeof insertHealthMarkerSchema>;
 export type HealthMarker = typeof healthMarkers.$inferSelect;
 
-// Medications table
+// Separation rule type for conflict tracking
+export type SeparationRule = {
+  pillId: number;
+  pillType: "medication" | "supplement";
+  pillName: string;
+  minutesApart: number;
+  reason: string;
+};
+
+// Medications table with enhanced pill planner fields
 export const medications = pgTable("medications", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   dosage: text("dosage").notNull(),
   frequency: text("frequency").notNull(),
-  timeOfDay: text("time_of_day"), // morning, afternoon, evening, night
-  withFood: boolean("with_food").default(false),
+  timeOfDay: text("time_of_day"), // legacy field
+  timeBlock: text("time_block").default("morning"), // morning, midday, evening, bedtime
+  scheduledTime: text("scheduled_time"), // specific HH:MM time if needed
+  foodRule: text("food_rule").default("either"), // with_food, empty_stomach, either
+  withFood: boolean("with_food").default(false), // legacy field
+  separationRules: jsonb("separation_rules").$type<SeparationRule[]>().default([]),
+  allowedTogetherWith: jsonb("allowed_together_with").$type<number[]>().default([]), // medication IDs
+  userOverride: boolean("user_override").default(false), // user chose to ignore conflicts
+  stackId: integer("stack_id"), // reference to pill stack
   notes: text("notes"),
+  whyTaking: text("why_taking"), // one-line explanation
   active: boolean("active").default(true),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
@@ -76,15 +93,23 @@ export const insertMedicationSchema = createInsertSchema(medications).omit({
 export type InsertMedication = z.infer<typeof insertMedicationSchema>;
 export type Medication = typeof medications.$inferSelect;
 
-// Supplements table
+// Supplements table with enhanced pill planner fields
 export const supplements = pgTable("supplements", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   dosage: text("dosage").notNull(),
   frequency: text("frequency").notNull(),
-  timeOfDay: text("time_of_day"),
-  withFood: boolean("with_food").default(false),
+  timeOfDay: text("time_of_day"), // legacy field
+  timeBlock: text("time_block").default("morning"), // morning, midday, evening, bedtime
+  scheduledTime: text("scheduled_time"), // specific HH:MM time if needed
+  foodRule: text("food_rule").default("either"), // with_food, empty_stomach, either
+  withFood: boolean("with_food").default(false), // legacy field
+  separationRules: jsonb("separation_rules").$type<SeparationRule[]>().default([]),
+  allowedTogetherWith: jsonb("allowed_together_with").$type<number[]>().default([]), // supplement IDs
+  userOverride: boolean("user_override").default(false), // user chose to ignore conflicts
+  stackId: integer("stack_id"), // reference to pill stack
   reason: text("reason"),
+  whyTaking: text("why_taking"), // one-line explanation
   source: text("source"), // link to clinical guideline
   active: boolean("active").default(true),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
@@ -97,6 +122,45 @@ export const insertSupplementSchema = createInsertSchema(supplements).omit({
 
 export type InsertSupplement = z.infer<typeof insertSupplementSchema>;
 export type Supplement = typeof supplements.$inferSelect;
+
+// Pill Stacks - groups of pills taken together
+export const pillStacks = pgTable("pill_stacks", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(), // e.g., "Morning Stack", "Evening Stack"
+  timeBlock: text("time_block").notNull(), // morning, midday, evening, bedtime
+  scheduledTime: text("scheduled_time"), // specific HH:MM time
+  description: text("description"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertPillStackSchema = createInsertSchema(pillStacks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPillStack = z.infer<typeof insertPillStackSchema>;
+export type PillStack = typeof pillStacks.$inferSelect;
+
+// Pill Doses - tracks when pills were taken
+export const pillDoses = pgTable("pill_doses", {
+  id: serial("id").primaryKey(),
+  pillType: text("pill_type").notNull(), // medication, supplement
+  pillId: integer("pill_id").notNull(),
+  scheduledDate: date("scheduled_date").notNull(),
+  scheduledTimeBlock: text("scheduled_time_block").notNull(), // morning, midday, evening, bedtime
+  status: text("status").notNull().default("pending"), // pending, taken, skipped, snoozed
+  takenAt: timestamp("taken_at"),
+  snoozedUntil: timestamp("snoozed_until"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertPillDoseSchema = createInsertSchema(pillDoses).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPillDose = z.infer<typeof insertPillDoseSchema>;
+export type PillDose = typeof pillDoses.$inferSelect;
 
 // Recommendations table
 export const recommendations = pgTable("recommendations", {
@@ -147,6 +211,7 @@ export const interactions = pgTable("interactions", {
   severity: text("severity").notNull(), // mild, moderate, severe
   description: text("description").notNull(),
   recommendation: text("recommendation").notNull(),
+  separationMinutes: integer("separation_minutes"), // how many minutes apart if applicable
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 

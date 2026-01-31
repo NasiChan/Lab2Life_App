@@ -7,6 +7,8 @@ import {
   insertMedicationSchema,
   insertSupplementSchema,
   insertReminderSchema,
+  insertPillStackSchema,
+  insertPillDoseSchema,
 } from "@shared/schema";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -316,6 +318,176 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error checking interactions:", error);
       res.status(500).json({ error: "Failed to check interactions" });
+    }
+  });
+
+  // Pill Stacks
+  app.get("/api/pill-stacks", async (req: Request, res: Response) => {
+    try {
+      const stacks = await storage.getPillStacks();
+      res.json(stacks);
+    } catch (error) {
+      console.error("Error fetching pill stacks:", error);
+      res.status(500).json({ error: "Failed to fetch pill stacks" });
+    }
+  });
+
+  app.post("/api/pill-stacks", async (req: Request, res: Response) => {
+    try {
+      const parsed = insertPillStackSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors });
+      }
+      const stack = await storage.createPillStack(parsed.data);
+      res.status(201).json(stack);
+    } catch (error) {
+      console.error("Error creating pill stack:", error);
+      res.status(500).json({ error: "Failed to create pill stack" });
+    }
+  });
+
+  app.patch("/api/pill-stacks/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const stack = await storage.updatePillStack(id, req.body);
+      if (!stack) {
+        return res.status(404).json({ error: "Pill stack not found" });
+      }
+      res.json(stack);
+    } catch (error) {
+      console.error("Error updating pill stack:", error);
+      res.status(500).json({ error: "Failed to update pill stack" });
+    }
+  });
+
+  app.delete("/api/pill-stacks/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deletePillStack(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting pill stack:", error);
+      res.status(500).json({ error: "Failed to delete pill stack" });
+    }
+  });
+
+  // Pill Doses (tracking when pills are taken)
+  app.get("/api/pill-doses", async (req: Request, res: Response) => {
+    try {
+      const date = req.query.date as string;
+      if (date) {
+        const doses = await storage.getPillDosesByDate(date);
+        res.json(doses);
+      } else {
+        const doses = await storage.getPillDoses();
+        res.json(doses);
+      }
+    } catch (error) {
+      console.error("Error fetching pill doses:", error);
+      res.status(500).json({ error: "Failed to fetch pill doses" });
+    }
+  });
+
+  app.post("/api/pill-doses", async (req: Request, res: Response) => {
+    try {
+      const parsed = insertPillDoseSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors });
+      }
+      const dose = await storage.createPillDose(parsed.data);
+      res.status(201).json(dose);
+    } catch (error) {
+      console.error("Error creating pill dose:", error);
+      res.status(500).json({ error: "Failed to create pill dose" });
+    }
+  });
+
+  app.patch("/api/pill-doses/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updateData: any = { ...req.body };
+      
+      // Convert ISO string to Date object if takenAt is provided
+      if (updateData.takenAt && typeof updateData.takenAt === "string") {
+        updateData.takenAt = new Date(updateData.takenAt);
+      }
+      if (updateData.snoozedUntil && typeof updateData.snoozedUntil === "string") {
+        updateData.snoozedUntil = new Date(updateData.snoozedUntil);
+      }
+      
+      const dose = await storage.updatePillDose(id, updateData);
+      if (!dose) {
+        return res.status(404).json({ error: "Pill dose not found" });
+      }
+      res.json(dose);
+    } catch (error) {
+      console.error("Error updating pill dose:", error);
+      res.status(500).json({ error: "Failed to update pill dose" });
+    }
+  });
+
+  // Generate daily doses for a date (creates pending doses for all active pills)
+  app.post("/api/pill-doses/generate", async (req: Request, res: Response) => {
+    try {
+      const { date } = req.body;
+      if (!date) {
+        return res.status(400).json({ error: "Date is required" });
+      }
+
+      // Get existing doses for the date
+      const existingDoses = await storage.getPillDosesByDate(date);
+      const existingKeys = new Set(
+        existingDoses.map((d) => `${d.pillType}-${d.pillId}-${d.scheduledTimeBlock}`)
+      );
+
+      // Get active medications and supplements
+      const medications = (await storage.getMedications()).filter((m) => m.active);
+      const supplements = (await storage.getSupplements()).filter((s) => s.active);
+
+      const newDoses = [];
+
+      // Create doses for medications
+      for (const med of medications) {
+        const timeBlock = med.timeBlock || "morning";
+        const key = `medication-${med.id}-${timeBlock}`;
+        if (!existingKeys.has(key)) {
+          const dose = await storage.createPillDose({
+            pillType: "medication",
+            pillId: med.id,
+            scheduledDate: date,
+            scheduledTimeBlock: timeBlock,
+            status: "pending",
+            takenAt: null,
+            snoozedUntil: null,
+          });
+          newDoses.push(dose);
+        }
+      }
+
+      // Create doses for supplements
+      for (const supp of supplements) {
+        const timeBlock = supp.timeBlock || "morning";
+        const key = `supplement-${supp.id}-${timeBlock}`;
+        if (!existingKeys.has(key)) {
+          const dose = await storage.createPillDose({
+            pillType: "supplement",
+            pillId: supp.id,
+            scheduledDate: date,
+            scheduledTimeBlock: timeBlock,
+            status: "pending",
+            takenAt: null,
+            snoozedUntil: null,
+          });
+          newDoses.push(dose);
+        }
+      }
+
+      // Return all doses for the date
+      const allDoses = await storage.getPillDosesByDate(date);
+      res.json(allDoses);
+    } catch (error) {
+      console.error("Error generating pill doses:", error);
+      res.status(500).json({ error: "Failed to generate pill doses" });
     }
   });
 

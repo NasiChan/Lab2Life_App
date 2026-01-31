@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import {
   users,
   labResults,
@@ -9,6 +9,8 @@ import {
   recommendations,
   reminders,
   interactions,
+  pillStacks,
+  pillDoses,
   type User,
   type InsertUser,
   type LabResult,
@@ -25,6 +27,10 @@ import {
   type InsertReminder,
   type Interaction,
   type InsertInteraction,
+  type PillStack,
+  type InsertPillStack,
+  type PillDose,
+  type InsertPillDose,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -77,6 +83,20 @@ export interface IStorage {
   getInteractions(): Promise<Interaction[]>;
   createInteraction(data: InsertInteraction): Promise<Interaction>;
   deleteAllInteractions(): Promise<void>;
+
+  // Pill Stacks
+  getPillStacks(): Promise<PillStack[]>;
+  getPillStack(id: number): Promise<PillStack | undefined>;
+  createPillStack(data: InsertPillStack): Promise<PillStack>;
+  updatePillStack(id: number, data: Partial<InsertPillStack>): Promise<PillStack | undefined>;
+  deletePillStack(id: number): Promise<void>;
+
+  // Pill Doses
+  getPillDoses(): Promise<PillDose[]>;
+  getPillDosesByDate(date: string): Promise<PillDose[]>;
+  createPillDose(data: InsertPillDose): Promise<PillDose>;
+  updatePillDose(id: number, data: Partial<InsertPillDose>): Promise<PillDose | undefined>;
+  deletePillDose(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -240,6 +260,53 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAllInteractions(): Promise<void> {
     await db.delete(interactions);
+  }
+
+  // Pill Stacks
+  async getPillStacks(): Promise<PillStack[]> {
+    return db.select().from(pillStacks).orderBy(pillStacks.timeBlock);
+  }
+
+  async getPillStack(id: number): Promise<PillStack | undefined> {
+    const [result] = await db.select().from(pillStacks).where(eq(pillStacks.id, id));
+    return result;
+  }
+
+  async createPillStack(data: InsertPillStack): Promise<PillStack> {
+    const [created] = await db.insert(pillStacks).values(data).returning();
+    return created;
+  }
+
+  async updatePillStack(id: number, data: Partial<InsertPillStack>): Promise<PillStack | undefined> {
+    const [updated] = await db.update(pillStacks).set(data).where(eq(pillStacks.id, id)).returning();
+    return updated;
+  }
+
+  async deletePillStack(id: number): Promise<void> {
+    await db.delete(pillStacks).where(eq(pillStacks.id, id));
+  }
+
+  // Pill Doses
+  async getPillDoses(): Promise<PillDose[]> {
+    return db.select().from(pillDoses).orderBy(desc(pillDoses.scheduledDate));
+  }
+
+  async getPillDosesByDate(date: string): Promise<PillDose[]> {
+    return db.select().from(pillDoses).where(eq(pillDoses.scheduledDate, date));
+  }
+
+  async createPillDose(data: InsertPillDose): Promise<PillDose> {
+    const [created] = await db.insert(pillDoses).values(data).returning();
+    return created;
+  }
+
+  async updatePillDose(id: number, data: Partial<InsertPillDose>): Promise<PillDose | undefined> {
+    const [updated] = await db.update(pillDoses).set(data).where(eq(pillDoses.id, id)).returning();
+    return updated;
+  }
+
+  async deletePillDose(id: number): Promise<void> {
+    await db.delete(pillDoses).where(eq(pillDoses.id, id));
   }
 }
 

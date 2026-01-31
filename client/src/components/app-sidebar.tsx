@@ -8,6 +8,7 @@ import {
   Clock,
   AlertTriangle,
   Sparkles,
+  Calendar,
 } from "lucide-react";
 import {
   Sidebar,
@@ -27,6 +28,11 @@ const mainMenuItems = [
     title: "Dashboard",
     url: "/",
     icon: Home,
+  },
+  {
+    title: "Pill Planner",
+    url: "/planner",
+    icon: Calendar,
   },
   {
     title: "Lab Results",

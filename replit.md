@@ -39,12 +39,23 @@ Preferred communication style: Simple, everyday language.
 - **Users**: Authentication with username/password
 - **Lab Results**: Uploaded documents with processing status
 - **Health Markers**: Extracted values (vitamins, minerals, blood values) with normal ranges
-- **Medications**: User medications with dosage, frequency, timing
-- **Supplements**: User supplements with dosage and recommendations
+- **Medications**: User medications with dosage, frequency, timing, timeBlock, foodRule, separationRules
+- **Supplements**: User supplements with dosage, timeBlock, foodRule, separationRules
 - **Recommendations**: AI-generated health recommendations (supplement, dietary, physical)
 - **Reminders**: Scheduled reminders for medications/supplements
 - **Interactions**: Drug/supplement interaction warnings
+- **Pill Stacks**: Groups of pills taken together at specific times
+- **Pill Doses**: Daily tracking of individual pill doses with status (pending/taken/snoozed)
 - **Conversations/Messages**: AI chat history (Replit integration module)
+
+### Pill Planner Feature
+The Pill Planner (`/planner`) is a mobile-first daily/weekly medication and supplement tracker:
+- **Daily View**: Shows pills organized by time blocks (Morning, Midday, Evening, Bedtime)
+- **Weekly View**: Calendar grid showing pill dots for each day/time block
+- **Dose Tracking**: Mark pills as taken or snooze for later
+- **Progress Tracking**: Shows completion percentage for each day
+- **Conflict Detection**: Visual warnings for separation rules (e.g., Iron + Calcium)
+- **Food Rules**: Tags showing whether to take with food or on empty stomach
 
 ### Project Structure
 ```

@@ -9,6 +9,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
+import PillPlanner from "@/pages/pill-planner";
 import LabResults from "@/pages/lab-results";
 import Medications from "@/pages/medications";
 import Supplements from "@/pages/supplements";
@@ -20,6 +21,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/planner" component={PillPlanner} />
       <Route path="/lab-results" component={LabResults} />
       <Route path="/medications" component={Medications} />
       <Route path="/supplements" component={Supplements} />
@@ -49,10 +51,8 @@ function App() {
                   <SidebarTrigger data-testid="button-sidebar-toggle" />
                   <ThemeToggle />
                 </header>
-                <main className="flex-1 overflow-auto p-6 custom-scrollbar">
-                  <div className="mx-auto max-w-6xl">
-                    <Router />
-                  </div>
+                <main className="flex-1 overflow-auto custom-scrollbar">
+                  <Router />
                 </main>
               </div>
             </div>

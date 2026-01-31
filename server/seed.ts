@@ -6,6 +6,7 @@ import {
   labResults,
   healthMarkers,
   recommendations,
+  pillStacks,
 } from "@shared/schema";
 import { sql } from "drizzle-orm";
 
@@ -20,15 +21,38 @@ export async function seedDatabase() {
 
     console.log("Seeding database with sample data...");
 
-    // Seed medications
+    // Seed pill stacks first
+    const [morningStack] = await db.insert(pillStacks).values({
+      name: "Morning Stack",
+      timeBlock: "morning",
+      scheduledTime: "08:00",
+      description: "Daily morning vitamins and medications with breakfast",
+    }).returning();
+
+    const [eveningStack] = await db.insert(pillStacks).values({
+      name: "Evening Stack",
+      timeBlock: "evening",
+      scheduledTime: "21:00",
+      description: "Evening medications and supplements before bed",
+    }).returning();
+
+    // Seed medications with enhanced pill planner fields
     await db.insert(medications).values([
       {
         name: "Lisinopril",
         dosage: "10mg",
         frequency: "Once daily",
         timeOfDay: "morning",
+        timeBlock: "morning",
+        scheduledTime: "08:00",
+        foodRule: "either",
         withFood: false,
+        separationRules: [],
+        allowedTogetherWith: [],
+        userOverride: false,
+        stackId: morningStack.id,
         notes: "Blood pressure medication - take consistently at the same time each day",
+        whyTaking: "Controls blood pressure",
         active: true,
       },
       {
@@ -36,8 +60,16 @@ export async function seedDatabase() {
         dosage: "500mg",
         frequency: "Twice daily",
         timeOfDay: "morning",
+        timeBlock: "morning",
+        scheduledTime: "08:00",
+        foodRule: "with_food",
         withFood: true,
+        separationRules: [],
+        allowedTogetherWith: [],
+        userOverride: false,
+        stackId: morningStack.id,
         notes: "Take with meals to reduce stomach upset",
+        whyTaking: "Blood sugar management",
         active: true,
       },
       {
@@ -45,21 +77,37 @@ export async function seedDatabase() {
         dosage: "20mg",
         frequency: "Once daily",
         timeOfDay: "evening",
+        timeBlock: "bedtime",
+        scheduledTime: "21:00",
+        foodRule: "either",
         withFood: false,
+        separationRules: [],
+        allowedTogetherWith: [],
+        userOverride: false,
+        stackId: eveningStack.id,
         notes: "Cholesterol medication - evening dosing is most effective",
+        whyTaking: "Lowers cholesterol",
         active: true,
       },
     ]);
 
-    // Seed supplements
+    // Seed supplements with enhanced pill planner fields
     await db.insert(supplements).values([
       {
         name: "Vitamin D3",
         dosage: "2000 IU",
         frequency: "Once daily",
         timeOfDay: "morning",
+        timeBlock: "morning",
+        scheduledTime: "08:00",
+        foodRule: "with_food",
         withFood: true,
+        separationRules: [],
+        allowedTogetherWith: [],
+        userOverride: false,
+        stackId: morningStack.id,
         reason: "Lab results showed vitamin D deficiency (level: 18 ng/mL)",
+        whyTaking: "Supports bone health and immunity",
         source: "https://ods.od.nih.gov/factsheets/VitaminD-HealthProfessional/",
         active: true,
       },
@@ -68,8 +116,16 @@ export async function seedDatabase() {
         dosage: "1000mg",
         frequency: "Twice daily",
         timeOfDay: "morning",
+        timeBlock: "morning",
+        scheduledTime: "08:00",
+        foodRule: "with_food",
         withFood: true,
+        separationRules: [],
+        allowedTogetherWith: [],
+        userOverride: false,
+        stackId: morningStack.id,
         reason: "Heart health and to support healthy cholesterol levels",
+        whyTaking: "Heart and brain health",
         source: "https://www.heart.org/en/healthy-living/healthy-eating/eat-smart/fats/fish-and-omega-3-fatty-acids",
         active: true,
       },
@@ -78,8 +134,16 @@ export async function seedDatabase() {
         dosage: "400mg",
         frequency: "Once daily",
         timeOfDay: "evening",
+        timeBlock: "bedtime",
+        scheduledTime: "21:00",
+        foodRule: "either",
         withFood: false,
+        separationRules: [],
+        allowedTogetherWith: [],
+        userOverride: false,
+        stackId: eveningStack.id,
         reason: "Muscle recovery and sleep support",
+        whyTaking: "Better sleep and muscle relaxation",
         active: true,
       },
       {
@@ -87,8 +151,56 @@ export async function seedDatabase() {
         dosage: "1 capsule",
         frequency: "Once daily",
         timeOfDay: "morning",
+        timeBlock: "morning",
+        scheduledTime: "08:00",
+        foodRule: "with_food",
         withFood: true,
+        separationRules: [],
+        allowedTogetherWith: [],
+        userOverride: false,
+        stackId: morningStack.id,
         reason: "Energy support and nervous system health",
+        whyTaking: "Energy and nerve function",
+        active: true,
+      },
+      {
+        name: "Iron",
+        dosage: "18mg",
+        frequency: "Once daily",
+        timeOfDay: "midday",
+        timeBlock: "midday",
+        scheduledTime: "12:00",
+        foodRule: "empty_stomach",
+        withFood: false,
+        separationRules: [
+          {
+            pillId: 0, // Will be updated after calcium is created
+            pillType: "supplement",
+            pillName: "Calcium",
+            minutesApart: 120,
+            reason: "Calcium reduces iron absorption",
+          },
+        ],
+        allowedTogetherWith: [],
+        userOverride: false,
+        reason: "Supporting healthy iron levels",
+        whyTaking: "Prevents anemia",
+        active: true,
+      },
+      {
+        name: "Calcium",
+        dosage: "500mg",
+        frequency: "Once daily",
+        timeOfDay: "evening",
+        timeBlock: "evening",
+        scheduledTime: "18:00",
+        foodRule: "with_food",
+        withFood: true,
+        separationRules: [],
+        allowedTogetherWith: [],
+        userOverride: false,
+        reason: "Bone health support",
+        whyTaking: "Strong bones",
         active: true,
       },
     ]);

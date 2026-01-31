@@ -16,6 +16,7 @@ import {
   ArrowRight,
   Sparkles,
   Clock,
+  Calendar,
 } from "lucide-react";
 import type { LabResult, HealthMarker, Medication, Supplement, Recommendation, Reminder } from "@shared/schema";
 
@@ -338,7 +339,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 sm:p-6 max-w-6xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold tracking-tight" data-testid="text-dashboard-title">
           Welcome to Lab2Life
@@ -395,6 +396,12 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
             <Button asChild className="h-auto py-4 flex-col gap-2">
+              <Link href="/planner">
+                <Calendar className="h-5 w-5" />
+                <span>Open Pill Planner</span>
+              </Link>
+            </Button>
+            <Button variant="outline" asChild className="h-auto py-4 flex-col gap-2">
               <Link href="/lab-results">
                 <FileText className="h-5 w-5" />
                 <span>Upload Lab Results</span>
@@ -404,12 +411,6 @@ export default function Dashboard() {
               <Link href="/medications">
                 <Pill className="h-5 w-5" />
                 <span>Add Medication</span>
-              </Link>
-            </Button>
-            <Button variant="outline" asChild className="h-auto py-4 flex-col gap-2">
-              <Link href="/supplements">
-                <Apple className="h-5 w-5" />
-                <span>Add Supplement</span>
               </Link>
             </Button>
             <Button variant="outline" asChild className="h-auto py-4 flex-col gap-2">
