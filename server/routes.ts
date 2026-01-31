@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { createServer, type Server } from "http";
+import type { Server } from "http";
 import multer from "multer";
 import { storage } from "./storage";
 import { extractLabData, checkInteractions } from "./gemini";
@@ -16,12 +16,74 @@ import {
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
+/**
+ * Convert a value that might be string | string[] | unknown into a single string.
+ *
+ * @param value - A value that may come from req.query / req.params / req.headers.
+ * @returns The string value, or first element if it's an array, otherwise undefined.
+ *
+ * Preconditions:
+ * - value may be unknown, string, string[], or other types.
+ * Postconditions:
+ * - Never returns an array.
+ */
+function toSingleString(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  return undefined;
+}
+
+/**
+ * Safely read a single query param as a string.
+ *
+ * @param req - Express request
+ * @param key - Query param key
+ * @returns A single string value (never string[]) or undefined.
+ *
+ * Preconditions:
+ * - req.query may contain repeated parameters (arrays).
+ * Postconditions:
+ * - Never returns an array.
+ */
+function getQueryString(req: Request, key: string): string | undefined {
+  return toSingleString((req.query as Record<string, unknown>)[key]);
+}
+
+/**
+ * Safely parse an integer route param (like :id).
+ *
+ * @param req - Express request
+ * @param res - Express response (used to send 400s)
+ * @param key - Route param key (e.g., "id")
+ * @returns Parsed integer, or undefined if invalid (response is sent).
+ *
+ * Preconditions:
+ * - req.params[key] may be string or string[] depending on typings.
+ * Postconditions:
+ * - If returns number, it is a valid integer.
+ * - If returns undefined, an error response has been sent.
+ */
+function requireIntParam(req: Request, res: Response, key: string): number | undefined {
+  const raw = toSingleString((req.params as Record<string, unknown>)[key]);
+  if (!raw) {
+    res.status(400).json({ error: `Missing ${key}` });
+    return undefined;
+  }
+
+  const n = Number.parseInt(raw, 10);
+  if (Number.isNaN(n)) {
+    res.status(400).json({ error: `Invalid ${key}` });
+    return undefined;
+  }
+
+  return n;
+}
+
+export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  // =========================================================
   // Lab Results
-  app.get("/api/lab-results", async (req: Request, res: Response) => {
+  // =========================================================
+  app.get("/api/lab-results", async (_req: Request, res: Response) => {
     try {
       const results = await storage.getLabResults();
       res.json(results);
@@ -31,35 +93,47 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/lab-results/upload", upload.single("file"), async (req: Request, res: Response) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ error: "No file uploaded" });
+  app.post(
+    "/api/lab-results/upload",
+    upload.single("file"),
+    async (req: Request, res: Response) => {
+      try {
+        if (!req.file) {
+          return res.status(400).json({ error: "No file uploaded" });
+        }
+
+        const labResult = await storage.createLabResult({
+          fileName: req.file.originalname,
+          status: "processing",
+          rawText: null,
+        });
+
+        // Fire-and-forget processing (do not block response)
+        void processLabResult(labResult.id, req.file.buffer.toString("utf-8"));
+
+        res.status(201).json(labResult);
+      } catch (error) {
+        console.error("Error uploading lab result:", error);
+        res.status(500).json({ error: "Failed to upload lab result" });
       }
-
-      // Create initial lab result
-      const labResult = await storage.createLabResult({
-        fileName: req.file.originalname,
-        status: "processing",
-        rawText: null,
-      });
-
-      // Process in background
-      processLabResult(labResult.id, req.file.buffer.toString("utf-8"));
-
-      res.status(201).json(labResult);
-    } catch (error) {
-      console.error("Error uploading lab result:", error);
-      res.status(500).json({ error: "Failed to upload lab result" });
     }
-  });
+  );
 
+  /**
+   * Process a lab result asynchronously.
+   *
+   * @param labResultId - ID of the lab result record
+   * @param rawText - Extracted text from uploaded file
+   *
+   * Preconditions:
+   * - labResultId exists in storage.
+   * Postconditions:
+   * - Updates lab result status to completed or error.
+   */
   async function processLabResult(labResultId: number, rawText: string) {
     try {
-      // Extract data using Gemini
       const extractedData = await extractLabData(rawText);
 
-      // Save health markers
       for (const marker of extractedData.markers) {
         await storage.createHealthMarker({
           labResultId,
@@ -73,7 +147,6 @@ export async function registerRoutes(
         });
       }
 
-      // Save recommendations
       for (const rec of extractedData.recommendations) {
         await storage.createRecommendation({
           labResultId,
@@ -86,7 +159,6 @@ export async function registerRoutes(
         });
       }
 
-      // Update status
       await storage.updateLabResult(labResultId, {
         status: "completed",
         rawText,
@@ -99,7 +171,9 @@ export async function registerRoutes(
 
   app.delete("/api/lab-results/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = requireIntParam(req, res, "id");
+      if (id === undefined) return;
+
       await storage.deleteLabResult(id);
       res.status(204).send();
     } catch (error) {
@@ -108,8 +182,10 @@ export async function registerRoutes(
     }
   });
 
+  // =========================================================
   // Health Markers
-  app.get("/api/health-markers", async (req: Request, res: Response) => {
+  // =========================================================
+  app.get("/api/health-markers", async (_req: Request, res: Response) => {
     try {
       const markers = await storage.getHealthMarkers();
       res.json(markers);
@@ -119,8 +195,10 @@ export async function registerRoutes(
     }
   });
 
+  // =========================================================
   // Medications
-  app.get("/api/medications", async (req: Request, res: Response) => {
+  // =========================================================
+  app.get("/api/medications", async (_req: Request, res: Response) => {
     try {
       const meds = await storage.getMedications();
       res.json(meds);
@@ -146,7 +224,9 @@ export async function registerRoutes(
 
   app.patch("/api/medications/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = requireIntParam(req, res, "id");
+      if (id === undefined) return;
+
       const medication = await storage.updateMedication(id, req.body);
       if (!medication) {
         return res.status(404).json({ error: "Medication not found" });
@@ -160,7 +240,9 @@ export async function registerRoutes(
 
   app.delete("/api/medications/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = requireIntParam(req, res, "id");
+      if (id === undefined) return;
+
       await storage.deleteMedication(id);
       res.status(204).send();
     } catch (error) {
@@ -169,8 +251,10 @@ export async function registerRoutes(
     }
   });
 
+  // =========================================================
   // Supplements
-  app.get("/api/supplements", async (req: Request, res: Response) => {
+  // =========================================================
+  app.get("/api/supplements", async (_req: Request, res: Response) => {
     try {
       const supps = await storage.getSupplements();
       res.json(supps);
@@ -196,7 +280,9 @@ export async function registerRoutes(
 
   app.patch("/api/supplements/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = requireIntParam(req, res, "id");
+      if (id === undefined) return;
+
       const supplement = await storage.updateSupplement(id, req.body);
       if (!supplement) {
         return res.status(404).json({ error: "Supplement not found" });
@@ -210,7 +296,9 @@ export async function registerRoutes(
 
   app.delete("/api/supplements/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = requireIntParam(req, res, "id");
+      if (id === undefined) return;
+
       await storage.deleteSupplement(id);
       res.status(204).send();
     } catch (error) {
@@ -219,8 +307,10 @@ export async function registerRoutes(
     }
   });
 
+  // =========================================================
   // Recommendations
-  app.get("/api/recommendations", async (req: Request, res: Response) => {
+  // =========================================================
+  app.get("/api/recommendations", async (_req: Request, res: Response) => {
     try {
       const recs = await storage.getRecommendations();
       res.json(recs);
@@ -230,8 +320,10 @@ export async function registerRoutes(
     }
   });
 
+  // =========================================================
   // Reminders
-  app.get("/api/reminders", async (req: Request, res: Response) => {
+  // =========================================================
+  app.get("/api/reminders", async (_req: Request, res: Response) => {
     try {
       const reminders = await storage.getReminders();
       res.json(reminders);
@@ -257,7 +349,9 @@ export async function registerRoutes(
 
   app.patch("/api/reminders/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = requireIntParam(req, res, "id");
+      if (id === undefined) return;
+
       const reminder = await storage.updateReminder(id, req.body);
       if (!reminder) {
         return res.status(404).json({ error: "Reminder not found" });
@@ -271,7 +365,9 @@ export async function registerRoutes(
 
   app.delete("/api/reminders/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = requireIntParam(req, res, "id");
+      if (id === undefined) return;
+
       await storage.deleteReminder(id);
       res.status(204).send();
     } catch (error) {
@@ -280,8 +376,10 @@ export async function registerRoutes(
     }
   });
 
+  // =========================================================
   // Interactions
-  app.get("/api/interactions", async (req: Request, res: Response) => {
+  // =========================================================
+  app.get("/api/interactions", async (_req: Request, res: Response) => {
     try {
       const interactions = await storage.getInteractions();
       res.json(interactions);
@@ -291,21 +389,18 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/interactions/check", async (req: Request, res: Response) => {
+  app.post("/api/interactions/check", async (_req: Request, res: Response) => {
     try {
-      // Get active medications and supplements
       const medications = (await storage.getMedications()).filter((m) => m.active);
       const supplements = (await storage.getSupplements()).filter((s) => s.active);
 
-      // Check interactions using Gemini
       const interactionResults = await checkInteractions(
         medications.map((m) => ({ id: m.id, name: m.name })),
         supplements.map((s) => ({ id: s.id, name: s.name }))
       );
 
-      // Clear old interactions and save new ones
       await storage.deleteAllInteractions();
-      
+
       for (const interaction of interactionResults) {
         await storage.createInteraction({
           medicationId: interaction.medicationId,
@@ -324,8 +419,10 @@ export async function registerRoutes(
     }
   });
 
+  // =========================================================
   // Pill Stacks
-  app.get("/api/pill-stacks", async (req: Request, res: Response) => {
+  // =========================================================
+  app.get("/api/pill-stacks", async (_req: Request, res: Response) => {
     try {
       const stacks = await storage.getPillStacks();
       res.json(stacks);
@@ -351,7 +448,9 @@ export async function registerRoutes(
 
   app.patch("/api/pill-stacks/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = requireIntParam(req, res, "id");
+      if (id === undefined) return;
+
       const stack = await storage.updatePillStack(id, req.body);
       if (!stack) {
         return res.status(404).json({ error: "Pill stack not found" });
@@ -365,7 +464,9 @@ export async function registerRoutes(
 
   app.delete("/api/pill-stacks/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = requireIntParam(req, res, "id");
+      if (id === undefined) return;
+
       await storage.deletePillStack(id);
       res.status(204).send();
     } catch (error) {
@@ -374,17 +475,20 @@ export async function registerRoutes(
     }
   });
 
-  // Pill Doses (tracking when pills are taken)
+  // =========================================================
+  // Pill Doses
+  // =========================================================
   app.get("/api/pill-doses", async (req: Request, res: Response) => {
     try {
-      const date = req.query.date as string;
+      const date = getQueryString(req, "date");
+
       if (date) {
         const doses = await storage.getPillDosesByDate(date);
-        res.json(doses);
-      } else {
-        const doses = await storage.getPillDoses();
-        res.json(doses);
+        return res.json(doses);
       }
+
+      const doses = await storage.getPillDoses();
+      res.json(doses);
     } catch (error) {
       console.error("Error fetching pill doses:", error);
       res.status(500).json({ error: "Failed to fetch pill doses" });
@@ -407,17 +511,18 @@ export async function registerRoutes(
 
   app.patch("/api/pill-doses/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
-      const updateData: any = { ...req.body };
-      
-      // Convert ISO string to Date object if takenAt is provided
-      if (updateData.takenAt && typeof updateData.takenAt === "string") {
+      const id = requireIntParam(req, res, "id");
+      if (id === undefined) return;
+
+      const updateData: Record<string, unknown> = { ...req.body };
+
+      if (typeof updateData.takenAt === "string") {
         updateData.takenAt = new Date(updateData.takenAt);
       }
-      if (updateData.snoozedUntil && typeof updateData.snoozedUntil === "string") {
+      if (typeof updateData.snoozedUntil === "string") {
         updateData.snoozedUntil = new Date(updateData.snoozedUntil);
       }
-      
+
       const dose = await storage.updatePillDose(id, updateData);
       if (!dose) {
         return res.status(404).json({ error: "Pill dose not found" });
@@ -429,32 +534,26 @@ export async function registerRoutes(
     }
   });
 
-  // Generate daily doses for a date (creates pending doses for all active pills)
   app.post("/api/pill-doses/generate", async (req: Request, res: Response) => {
     try {
-      const { date } = req.body;
+      const { date } = req.body as { date?: string };
       if (!date) {
         return res.status(400).json({ error: "Date is required" });
       }
 
-      // Get existing doses for the date
       const existingDoses = await storage.getPillDosesByDate(date);
       const existingKeys = new Set(
         existingDoses.map((d) => `${d.pillType}-${d.pillId}-${d.scheduledTimeBlock}`)
       );
 
-      // Get active medications and supplements
       const medications = (await storage.getMedications()).filter((m) => m.active);
       const supplements = (await storage.getSupplements()).filter((s) => s.active);
 
-      const newDoses = [];
-
-      // Create doses for medications
       for (const med of medications) {
         const timeBlock = med.timeBlock || "morning";
         const key = `medication-${med.id}-${timeBlock}`;
         if (!existingKeys.has(key)) {
-          const dose = await storage.createPillDose({
+          await storage.createPillDose({
             pillType: "medication",
             pillId: med.id,
             scheduledDate: date,
@@ -463,16 +562,14 @@ export async function registerRoutes(
             takenAt: null,
             snoozedUntil: null,
           });
-          newDoses.push(dose);
         }
       }
 
-      // Create doses for supplements
       for (const supp of supplements) {
         const timeBlock = supp.timeBlock || "morning";
         const key = `supplement-${supp.id}-${timeBlock}`;
         if (!existingKeys.has(key)) {
-          const dose = await storage.createPillDose({
+          await storage.createPillDose({
             pillType: "supplement",
             pillId: supp.id,
             scheduledDate: date,
@@ -481,11 +578,9 @@ export async function registerRoutes(
             takenAt: null,
             snoozedUntil: null,
           });
-          newDoses.push(dose);
         }
       }
 
-      // Return all doses for the date
       const allDoses = await storage.getPillDosesByDate(date);
       res.json(allDoses);
     } catch (error) {
@@ -494,19 +589,27 @@ export async function registerRoutes(
     }
   });
 
-  // Demo user ID (for simplicity, we use a demo user approach)
+  // =========================================================
+  // Demo User + Health Profile
+  // =========================================================
   const DEMO_USER_ID = "demo-user";
 
-  // Ensure demo user exists
+  /**
+   * Ensure the demo user exists.
+   *
+   * Preconditions:
+   * - storage implements getUser/getUserByUsername/createUser/updateUser.
+   * Postconditions:
+   * - Demo user exists with healthProfile and healthProfileStatus fields initialized.
+   */
   async function ensureDemoUser() {
     let user = await storage.getUser(DEMO_USER_ID);
     if (!user) {
-      // Create demo user with initial health profile status
       user = await storage.createUser({
         username: "demo",
         password: "demo",
       });
-      // Update with the demo user ID (since createUser generates a random ID)
+
       await storage.updateUser(user.id, {
         healthProfile: {},
         healthProfileStatus: { isComplete: false },
@@ -515,7 +618,12 @@ export async function registerRoutes(
     return user;
   }
 
-  // Helper to compute if health profile is complete
+  /**
+   * Compute if the health profile is complete.
+   *
+   * @param hp - Health profile
+   * @returns True if required numeric fields are present.
+   */
   function computeHealthProfileComplete(hp: HealthProfile): boolean {
     return (
       typeof hp.age === "number" &&
@@ -524,16 +632,11 @@ export async function registerRoutes(
     );
   }
 
-  // GET /api/me - returns current user with health profile
-  app.get("/api/me", async (req: Request, res: Response) => {
+  app.get("/api/me", async (_req: Request, res: Response) => {
     try {
-      // For now, use the first user or create a demo user
       let user = await storage.getUserByUsername("demo");
-      if (!user) {
-        user = await ensureDemoUser();
-      }
-      
-      // Don't return password
+      if (!user) user = await ensureDemoUser();
+
       const { password, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } catch (error) {
@@ -542,38 +645,32 @@ export async function registerRoutes(
     }
   });
 
-  // PATCH /api/me/health-profile - update health profile
   app.patch("/api/me/health-profile", async (req: Request, res: Response) => {
     try {
-      // Validate input
       const parseResult = healthProfileSchema.safeParse(req.body);
       if (!parseResult.success) {
-        return res.status(400).json({ error: "Invalid health profile data", details: parseResult.error.issues });
+        return res.status(400).json({
+          error: "Invalid health profile data",
+          details: parseResult.error.issues,
+        });
       }
 
       const updates = parseResult.data;
 
-      // Get current user
       let user = await storage.getUserByUsername("demo");
-      if (!user) {
-        user = await ensureDemoUser();
-      }
+      if (!user) user = await ensureDemoUser();
 
-      // Merge health profile
       const newHealthProfile: HealthProfile = {
         ...(user.healthProfile || {}),
         ...updates,
       };
 
-      // Update status
       const newStatus: HealthProfileStatus = {
         isComplete: computeHealthProfileComplete(newHealthProfile),
         lastUpdated: new Date().toISOString(),
-        // Clear skippedAt if they're filling in data
         skippedAt: undefined,
       };
 
-      // Update user
       const updatedUser = await storage.updateUser(user.id, {
         healthProfile: newHealthProfile,
         healthProfileStatus: newStatus,
@@ -593,13 +690,10 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/me/health-profile/skip - mark health profile as skipped
-  app.post("/api/me/health-profile/skip", async (req: Request, res: Response) => {
+  app.post("/api/me/health-profile/skip", async (_req: Request, res: Response) => {
     try {
       let user = await storage.getUserByUsername("demo");
-      if (!user) {
-        user = await ensureDemoUser();
-      }
+      if (!user) user = await ensureDemoUser();
 
       const newStatus: HealthProfileStatus = {
         ...(user.healthProfileStatus || { isComplete: false }),

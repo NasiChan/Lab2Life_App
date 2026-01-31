@@ -97,7 +97,7 @@ function ReminderCard({
           </div>
         </div>
         <Switch
-          checked={reminder.enabled}
+          checked={reminder.enabled ?? false}
           onCheckedChange={onToggleEnabled}
           data-testid={`switch-reminder-enabled-${reminder.id}`}
         />

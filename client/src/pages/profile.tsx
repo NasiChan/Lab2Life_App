@@ -1,8 +1,15 @@
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -37,15 +44,41 @@ import {
 } from "lucide-react";
 import type { User as UserType } from "@shared/schema";
 
+/**
+ * IMPORTANT:
+ * - Keep form values as STRINGS (because inputs are strings)
+ * - Convert to numbers right before sending to API
+ */
 const healthProfileFormSchema = z.object({
-  age: z.string().optional().transform((val) => val ? parseInt(val, 10) : undefined),
-  sex: z.enum(["male", "female", "other"]).optional().or(z.literal("")),
-  heightCm: z.string().optional().transform((val) => val ? parseFloat(val) : undefined),
-  weightKg: z.string().optional().transform((val) => val ? parseFloat(val) : undefined),
-  activityLevel: z.enum(["low", "moderate", "high"]).optional().or(z.literal("")),
+  age: z.string(),
+  sex: z.enum(["male", "female", "other"]).or(z.literal("")),
+  heightCm: z.string(),
+  weightKg: z.string(),
+  activityLevel: z.enum(["low", "moderate", "high"]).or(z.literal("")),
 });
 
 type HealthProfileFormValues = z.infer<typeof healthProfileFormSchema>;
+
+type HealthProfilePayload = {
+  age?: number;
+  sex?: "male" | "female" | "other";
+  heightCm?: number;
+  weightKg?: number;
+  activityLevel?: "low" | "moderate" | "high";
+};
+
+/**
+ * Convert a string input to an optional number.
+ *
+ * @param value - String from input.
+ * @returns number if valid, otherwise undefined.
+ */
+function toOptionalNumber(value: string): number | undefined {
+  const v = value.trim();
+  if (!v) return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
 
 export default function ProfilePage() {
   const { toast } = useToast();
@@ -55,25 +88,35 @@ export default function ProfilePage() {
     queryKey: ["/api/me"],
   });
 
-  const form = useForm({
+  const form = useForm<HealthProfileFormValues>({
     resolver: zodResolver(healthProfileFormSchema),
-    values: {
-      age: user?.healthProfile?.age?.toString() || "",
-      sex: user?.healthProfile?.sex || "",
-      heightCm: user?.healthProfile?.heightCm?.toString() || "",
-      weightKg: user?.healthProfile?.weightKg?.toString() || "",
-      activityLevel: user?.healthProfile?.activityLevel || "",
+    defaultValues: {
+      age: "",
+      sex: "",
+      heightCm: "",
+      weightKg: "",
+      activityLevel: "",
     },
   });
 
+  // When user data loads/changes, populate the form safely
+  useEffect(() => {
+    if (!user) return;
+
+    form.reset({
+      age: user.healthProfile?.age != null ? String(user.healthProfile.age) : "",
+      sex: user.healthProfile?.sex ?? "",
+      heightCm:
+        user.healthProfile?.heightCm != null ? String(user.healthProfile.heightCm) : "",
+      weightKg:
+        user.healthProfile?.weightKg != null ? String(user.healthProfile.weightKg) : "",
+      activityLevel: user.healthProfile?.activityLevel ?? "",
+    });
+  }, [user, form]);
+
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: HealthProfileFormValues) => {
-      const cleanData = {
-        ...data,
-        sex: data.sex === "" ? undefined : data.sex,
-        activityLevel: data.activityLevel === "" ? undefined : data.activityLevel,
-      };
-      const res = await apiRequest("PATCH", "/api/me/health-profile", cleanData);
+    mutationFn: async (data: HealthProfilePayload) => {
+      const res = await apiRequest("PATCH", "/api/me/health-profile", data);
       return res.json();
     },
     onSuccess: () => {
@@ -92,9 +135,17 @@ export default function ProfilePage() {
     },
   });
 
-  async function onSubmit(data: HealthProfileFormValues) {
-    await updateProfileMutation.mutateAsync(data);
-  }
+  const onSubmit: SubmitHandler<HealthProfileFormValues> = async (data) => {
+    const payload: HealthProfilePayload = {
+      age: toOptionalNumber(data.age),
+      sex: data.sex === "" ? undefined : data.sex,
+      heightCm: toOptionalNumber(data.heightCm),
+      weightKg: toOptionalNumber(data.weightKg),
+      activityLevel: data.activityLevel === "" ? undefined : data.activityLevel,
+    };
+
+    await updateProfileMutation.mutateAsync(payload);
+  };
 
   if (isLoading) {
     return (
@@ -111,13 +162,14 @@ export default function ProfilePage() {
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2" data-testid="text-page-title">
+        <h1
+          className="text-2xl font-bold tracking-tight flex items-center gap-2"
+          data-testid="text-page-title"
+        >
           <User className="h-6 w-6 text-primary" />
           Profile & Settings
         </h1>
-        <p className="text-muted-foreground">
-          Manage your health profile and preferences
-        </p>
+        <p className="text-muted-foreground">Manage your health profile and preferences</p>
       </div>
 
       <Card>
@@ -148,6 +200,7 @@ export default function ProfilePage() {
             )}
           </CardDescription>
         </CardHeader>
+
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -167,6 +220,7 @@ export default function ProfilePage() {
                           placeholder="30"
                           data-testid="input-profile-age"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormDescription>Required for profile completion</FormDescription>
@@ -181,7 +235,10 @@ export default function ProfilePage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Biological Sex</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value ?? ""}
+                      >
                         <FormControl>
                           <SelectTrigger data-testid="select-profile-sex">
                             <SelectValue placeholder="Select" />
@@ -215,6 +272,7 @@ export default function ProfilePage() {
                           placeholder="170"
                           data-testid="input-profile-height"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormDescription>Required for profile completion</FormDescription>
@@ -238,6 +296,7 @@ export default function ProfilePage() {
                           placeholder="70"
                           data-testid="input-profile-weight"
                           {...field}
+                          value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormDescription>Required for profile completion</FormDescription>
@@ -256,7 +315,10 @@ export default function ProfilePage() {
                       <Activity className="h-3 w-3" />
                       Activity Level
                     </FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value ?? ""}
+                    >
                       <FormControl>
                         <SelectTrigger data-testid="select-profile-activity">
                           <SelectValue placeholder="Select your activity level" />
@@ -264,7 +326,9 @@ export default function ProfilePage() {
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="low">Low - Mostly sedentary</SelectItem>
-                        <SelectItem value="moderate">Moderate - Some exercise weekly</SelectItem>
+                        <SelectItem value="moderate">
+                          Moderate - Some exercise weekly
+                        </SelectItem>
                         <SelectItem value="high">High - Very active lifestyle</SelectItem>
                       </SelectContent>
                     </Select>

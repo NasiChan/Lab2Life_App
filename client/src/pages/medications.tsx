@@ -74,7 +74,7 @@ function MedicationCard({
         </div>
         <div className="flex items-center gap-2">
           <Switch
-            checked={medication.active}
+            checked={medication.active ?? false}
             onCheckedChange={onToggleActive}
             data-testid={`switch-medication-active-${medication.id}`}
           />
@@ -217,7 +217,7 @@ function MedicationForm({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Time of Day</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
+              <Select onValueChange={field.onChange} value={field.value ?? undefined}>
                 <FormControl>
                   <SelectTrigger data-testid="select-medication-time">
                     <SelectValue placeholder="Select preferred time" />
@@ -249,7 +249,7 @@ function MedicationForm({
               </div>
               <FormControl>
                 <Switch
-                  checked={field.value}
+                  checked={field.value ?? false}
                   onCheckedChange={field.onChange}
                   data-testid="switch-medication-with-food"
                 />
@@ -268,6 +268,7 @@ function MedicationForm({
                 <Textarea
                   placeholder="Any additional notes..."
                   {...field}
+                  value={field.value ?? ""}
                   data-testid="textarea-medication-notes"
                 />
               </FormControl>

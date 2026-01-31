@@ -73,7 +73,7 @@ function SupplementCard({
         </div>
         <div className="flex items-center gap-2">
           <Switch
-            checked={supplement.active}
+            checked={supplement.active ?? false}
             onCheckedChange={onToggleActive}
             data-testid={`switch-supplement-active-${supplement.id}`}
           />
@@ -226,7 +226,7 @@ function SupplementForm({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Best Time to Take</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
+              <Select onValueChange={field.onChange} value={field.value ?? undefined}>
                 <FormControl>
                   <SelectTrigger data-testid="select-supplement-time">
                     <SelectValue placeholder="Select preferred time" />
@@ -258,7 +258,7 @@ function SupplementForm({
               </div>
               <FormControl>
                 <Switch
-                  checked={field.value}
+                  checked={field.value ?? false}
                   onCheckedChange={field.onChange}
                   data-testid="switch-supplement-with-food"
                 />
@@ -277,6 +277,7 @@ function SupplementForm({
                 <Textarea
                   placeholder="e.g., Low vitamin D levels from bloodwork"
                   {...field}
+                  value={field.value ?? ""}
                   data-testid="textarea-supplement-reason"
                 />
               </FormControl>
@@ -295,6 +296,7 @@ function SupplementForm({
                 <Input
                   placeholder="https://..."
                   {...field}
+                  value={field.value ?? ""}
                   data-testid="input-supplement-source"
                 />
               </FormControl>

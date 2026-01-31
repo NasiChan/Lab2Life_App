@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -32,21 +32,55 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { User, Heart, Ruler, Scale, Activity } from "lucide-react";
 
+/**
+ * Schema for what the FORM FIELDS actually hold (strings for numeric inputs).
+ * Preconditions:
+ * - Inputs may be empty strings.
+ * Postconditions:
+ * - Validation passes for empty strings; numeric strings are allowed.
+ */
 const healthProfileFormSchema = z.object({
-  age: z.string().optional().transform((val) => val ? parseInt(val, 10) : undefined),
+  age: z.string().optional(),
   sex: z.enum(["male", "female", "other"]).optional(),
-  heightCm: z.string().optional().transform((val) => val ? parseFloat(val) : undefined),
-  weightKg: z.string().optional().transform((val) => val ? parseFloat(val) : undefined),
+  heightCm: z.string().optional(),
+  weightKg: z.string().optional(),
   activityLevel: z.enum(["low", "moderate", "high"]).optional(),
 });
 
 type HealthProfileFormValues = z.infer<typeof healthProfileFormSchema>;
+
+type HealthProfilePayload = {
+  age?: number;
+  sex?: "male" | "female" | "other";
+  heightCm?: number;
+  weightKg?: number;
+  activityLevel?: "low" | "moderate" | "high";
+};
 
 interface HealthProfileModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onComplete?: () => void;
   onSkip?: () => void;
+}
+
+/**
+ * Convert a string (possibly empty) into an optional number.
+ *
+ * @param value - Raw form value (string or undefined).
+ * @returns A finite number if parsable, otherwise undefined.
+ *
+ * Preconditions:
+ * - value may be undefined or an empty string.
+ * Postconditions:
+ * - Returns undefined for empty/invalid inputs (never returns NaN).
+ */
+function toOptionalNumber(value: string | undefined): number | undefined {
+  const v = (value ?? "").trim();
+  if (!v) return undefined;
+
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 export function HealthProfileModal({
@@ -59,19 +93,19 @@ export function HealthProfileModal({
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const form = useForm({
+  const form = useForm<HealthProfileFormValues>({
     resolver: zodResolver(healthProfileFormSchema),
     defaultValues: {
       age: "",
-      sex: undefined as "male" | "female" | "other" | undefined,
+      sex: undefined,
       heightCm: "",
       weightKg: "",
-      activityLevel: undefined as "low" | "moderate" | "high" | undefined,
+      activityLevel: undefined,
     },
   });
 
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: HealthProfileFormValues) => {
+    mutationFn: async (data: HealthProfilePayload) => {
       const res = await apiRequest("PATCH", "/api/me/health-profile", data);
       return res.json();
     },
@@ -109,15 +143,41 @@ export function HealthProfileModal({
     },
   });
 
-  async function onSubmit(data: HealthProfileFormValues) {
+  /**
+   * Submit handler for the form.
+   *
+   * @param data - Raw form values (strings for numeric fields).
+   * Preconditions:
+   * - data has passed zod validation.
+   * Postconditions:
+   * - Sends a payload with numbers (or undefined) to the API.
+   */
+  const onSubmit: SubmitHandler<HealthProfileFormValues> = async (data) => {
     setIsSubmitting(true);
+
+    const payload: HealthProfilePayload = {
+      age: toOptionalNumber(data.age),
+      sex: data.sex,
+      heightCm: toOptionalNumber(data.heightCm),
+      weightKg: toOptionalNumber(data.weightKg),
+      activityLevel: data.activityLevel,
+    };
+
     try {
-      await updateProfileMutation.mutateAsync(data);
+      await updateProfileMutation.mutateAsync(payload);
     } finally {
       setIsSubmitting(false);
     }
-  }
+  };
 
+  /**
+   * Skip handler.
+   *
+   * Preconditions:
+   * - None.
+   * Postconditions:
+   * - Calls skip endpoint and closes the modal on success.
+   */
   function handleSkip() {
     skipMutation.mutate();
   }
@@ -153,7 +213,11 @@ export function HealthProfileModal({
                         type="number"
                         placeholder="30"
                         data-testid="input-age"
-                        {...field}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
                       />
                     </FormControl>
                     <FormMessage />
@@ -167,7 +231,10 @@ export function HealthProfileModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Sex</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
                       <FormControl>
                         <SelectTrigger data-testid="select-sex">
                           <SelectValue placeholder="Select" />
@@ -200,7 +267,11 @@ export function HealthProfileModal({
                         type="number"
                         placeholder="170"
                         data-testid="input-height"
-                        {...field}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
                       />
                     </FormControl>
                     <FormMessage />
@@ -222,7 +293,11 @@ export function HealthProfileModal({
                         type="number"
                         placeholder="70"
                         data-testid="input-weight"
-                        {...field}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
                       />
                     </FormControl>
                     <FormMessage />
@@ -240,7 +315,10 @@ export function HealthProfileModal({
                     <Activity className="h-3 w-3" />
                     Activity Level
                   </FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                  >
                     <FormControl>
                       <SelectTrigger data-testid="select-activity">
                         <SelectValue placeholder="Select your activity level" />
