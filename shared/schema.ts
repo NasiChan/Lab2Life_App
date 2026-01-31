@@ -3,16 +3,47 @@ import { pgTable, text, varchar, serial, integer, timestamp, boolean, jsonb, dec
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Health profile types
+export type HealthProfile = {
+  age?: number;
+  sex?: "male" | "female" | "other";
+  heightCm?: number;
+  weightKg?: number;
+  allergies?: string[];
+  conditions?: string[];
+  currentMedications?: string[];
+  activityLevel?: "low" | "moderate" | "high";
+};
+
+export type HealthProfileStatus = {
+  isComplete: boolean;
+  skippedAt?: string;
+  lastUpdated?: string;
+};
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  healthProfile: jsonb("health_profile").$type<HealthProfile>().default({}),
+  healthProfileStatus: jsonb("health_profile_status").$type<HealthProfileStatus>().default({ isComplete: false }),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+});
+
+export const healthProfileSchema = z.object({
+  age: z.number().min(1).max(150).optional(),
+  sex: z.enum(["male", "female", "other"]).optional(),
+  heightCm: z.number().min(50).max(300).optional(),
+  weightKg: z.number().min(10).max(500).optional(),
+  allergies: z.array(z.string()).optional(),
+  conditions: z.array(z.string()).optional(),
+  currentMedications: z.array(z.string()).optional(),
+  activityLevel: z.enum(["low", "moderate", "high"]).optional(),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;

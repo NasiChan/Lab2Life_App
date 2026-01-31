@@ -9,6 +9,9 @@ import {
   insertReminderSchema,
   insertPillStackSchema,
   insertPillDoseSchema,
+  healthProfileSchema,
+  type HealthProfile,
+  type HealthProfileStatus,
 } from "@shared/schema";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -488,6 +491,133 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error generating pill doses:", error);
       res.status(500).json({ error: "Failed to generate pill doses" });
+    }
+  });
+
+  // Demo user ID (for simplicity, we use a demo user approach)
+  const DEMO_USER_ID = "demo-user";
+
+  // Ensure demo user exists
+  async function ensureDemoUser() {
+    let user = await storage.getUser(DEMO_USER_ID);
+    if (!user) {
+      // Create demo user with initial health profile status
+      user = await storage.createUser({
+        username: "demo",
+        password: "demo",
+      });
+      // Update with the demo user ID (since createUser generates a random ID)
+      await storage.updateUser(user.id, {
+        healthProfile: {},
+        healthProfileStatus: { isComplete: false },
+      });
+    }
+    return user;
+  }
+
+  // Helper to compute if health profile is complete
+  function computeHealthProfileComplete(hp: HealthProfile): boolean {
+    return (
+      typeof hp.age === "number" &&
+      typeof hp.heightCm === "number" &&
+      typeof hp.weightKg === "number"
+    );
+  }
+
+  // GET /api/me - returns current user with health profile
+  app.get("/api/me", async (req: Request, res: Response) => {
+    try {
+      // For now, use the first user or create a demo user
+      let user = await storage.getUserByUsername("demo");
+      if (!user) {
+        user = await ensureDemoUser();
+      }
+      
+      // Don't return password
+      const { password, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
+  // PATCH /api/me/health-profile - update health profile
+  app.patch("/api/me/health-profile", async (req: Request, res: Response) => {
+    try {
+      // Validate input
+      const parseResult = healthProfileSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid health profile data", details: parseResult.error.issues });
+      }
+
+      const updates = parseResult.data;
+
+      // Get current user
+      let user = await storage.getUserByUsername("demo");
+      if (!user) {
+        user = await ensureDemoUser();
+      }
+
+      // Merge health profile
+      const newHealthProfile: HealthProfile = {
+        ...(user.healthProfile || {}),
+        ...updates,
+      };
+
+      // Update status
+      const newStatus: HealthProfileStatus = {
+        isComplete: computeHealthProfileComplete(newHealthProfile),
+        lastUpdated: new Date().toISOString(),
+        // Clear skippedAt if they're filling in data
+        skippedAt: undefined,
+      };
+
+      // Update user
+      const updatedUser = await storage.updateUser(user.id, {
+        healthProfile: newHealthProfile,
+        healthProfileStatus: newStatus,
+      });
+
+      if (!updatedUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      res.json({
+        healthProfile: updatedUser.healthProfile,
+        healthProfileStatus: updatedUser.healthProfileStatus,
+      });
+    } catch (error) {
+      console.error("Error updating health profile:", error);
+      res.status(500).json({ error: "Failed to update health profile" });
+    }
+  });
+
+  // POST /api/me/health-profile/skip - mark health profile as skipped
+  app.post("/api/me/health-profile/skip", async (req: Request, res: Response) => {
+    try {
+      let user = await storage.getUserByUsername("demo");
+      if (!user) {
+        user = await ensureDemoUser();
+      }
+
+      const newStatus: HealthProfileStatus = {
+        ...(user.healthProfileStatus || { isComplete: false }),
+        skippedAt: new Date().toISOString(),
+      };
+
+      const updatedUser = await storage.updateUser(user.id, {
+        healthProfileStatus: newStatus,
+      });
+
+      if (!updatedUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      res.json({ healthProfileStatus: updatedUser.healthProfileStatus });
+    } catch (error) {
+      console.error("Error skipping health profile:", error);
+      res.status(500).json({ error: "Failed to skip health profile" });
     }
   });
 
