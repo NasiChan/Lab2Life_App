@@ -96,3 +96,16 @@ The Pill Planner (`/planner`) is a mobile-first daily/weekly medication and supp
 - **@radix-ui/***: Accessible UI primitives
 - **react-hook-form + zod**: Form handling with validation
 - **multer**: File upload handling
+
+- ## Prerequisites
+
+- A **Google Gemini API Key**  
+  You can obtain one from **Google AI Studio**.
+
+## Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <your-repo-url>
+   cd <your-project-folder>
+
