@@ -103,7 +103,8 @@ The Pill Planner (`/planner`) is a mobile-first daily/weekly medication and supp
 
 ## 🛠️ Installation
 
-1. **Clone the repository**
+1. **Clone the repository**  
+   Clone the files into your project directory:  
    ```bash
    git clone <your-repo-url>
    cd <your-project-folder>
