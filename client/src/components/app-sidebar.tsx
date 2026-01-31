@@ -4,11 +4,11 @@ import {
   FileText,
   Pill,
   Apple,
-  Dumbbell,
   Clock,
   AlertTriangle,
   Sparkles,
   Calendar,
+  Settings,
 } from "lucide-react";
 import {
   Sidebar,
@@ -69,6 +69,14 @@ const safetyMenuItems = [
     title: "Interaction Checker",
     url: "/interactions",
     icon: AlertTriangle,
+  },
+];
+
+const settingsMenuItems = [
+  {
+    title: "Profile & Settings",
+    url: "/profile",
+    icon: Settings,
   },
 ];
 
@@ -139,6 +147,28 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {safetyMenuItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === item.url}
+                    data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                  >
+                    <Link href={item.url}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Settings</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {settingsMenuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
